@@ -1,2 +1,2 @@
 # Smoked-Meat
-Smoked meat from Arthur 
+Smoked meat by Arthur 
