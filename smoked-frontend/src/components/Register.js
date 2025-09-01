@@ -18,6 +18,10 @@ const Register = () => {
         }
     };
 
+    const Back = () => {
+    navigate('/');
+  };
+
     return (
         <form onSubmit={handleSubmit}>
             <div className="mb-3">
@@ -30,6 +34,7 @@ const Register = () => {
             </div>
             {error && <div className="alert alert-danger">{error}</div>}
             <button type="submit" className="btn btn-primary">Register</button>
+            <button onClick={Back} className="btn btn-primary">Back</button>
         </form>
     );
 };

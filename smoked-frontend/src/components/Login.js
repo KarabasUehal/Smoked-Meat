@@ -22,6 +22,10 @@ const Login = () => {
         }
     };
 
+    const Back = () => {
+    navigate('/');
+  };
+
     return (
         <form onSubmit={handleSubmit}>
             <div className="mb-3">
@@ -34,6 +38,7 @@ const Login = () => {
             </div>
             {error && <div className="alert alert-danger">{error}</div>}
             <button type="submit" className="btn btn-primary">Enter</button>
+            <button onClick={Back} className="btn btn-primary">Back</button>
         </form>
     );
 };

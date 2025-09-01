@@ -176,7 +176,7 @@ import { useNavigate } from 'react-router-dom';
                     </table>
                     <div className="mt-3">
                         <h4 style={{ color: '#FFFF00', textShadow: '1px 1px 2px rgba(0, 0, 0, 0.8)' }}>
-                            Price of all products: {totalPrice.toFixed(2)} rub.
+                            Price for all products: {totalPrice.toFixed(2)} rub.
                         </h4>
                         <h5 style={{ color: '#fc0808ff', textShadow: '1px 1px 2px rgba(0, 0, 0, 0.8)' }}>
                             Get 8% discount when you buy 10kg+! Or get 12% off when buying 20kg+!

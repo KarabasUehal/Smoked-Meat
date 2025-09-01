@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"smoked-meat/database"
+	"smoked-meat/middleware"
 	"smoked-meat/models"
 	"strconv"
 	"time"
@@ -14,21 +15,18 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-var redisClient *redis.Client
-var assortment []models.Assortment
-
 func GetAssortment(ctx *gin.Context) {
 	var ass *[]models.Assortment
+	redisClient := middleware.GetRedisClient()
 	cacheKey := ctx.Request.URL.String()
 	c := context.Background()
 
 	if redisClient != nil {
 		cached, err := redisClient.Get(c, cacheKey).Result()
 		if err == nil {
-			var assortment []models.Assortment
-			if json.Unmarshal([]byte(cached), &assortment) == nil {
+			if json.Unmarshal([]byte(cached), &ass) == nil {
 				log.Printf("Cache hit for assortment list")
-				ctx.JSON(http.StatusOK, assortment)
+				ctx.JSON(http.StatusOK, ass)
 				return
 			}
 			log.Printf("Failed to unmarshal cached assortment list: %v", err)
@@ -45,7 +43,7 @@ func GetAssortment(ctx *gin.Context) {
 		return
 	}
 
-	assortmentJSON, err := json.Marshal(assortment)
+	assortmentJSON, err := json.Marshal(ass)
 	if err != nil {
 		log.Printf("Failed to serialize assortment: %v", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize assortment"})
@@ -66,6 +64,9 @@ func GetAssortment(ctx *gin.Context) {
 
 func GetProduct(ctx *gin.Context) {
 	var product models.Assortment
+	redisClient := middleware.GetRedisClient()
+	cacheKey := ctx.Request.URL.String()
+	c := context.Background()
 
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
@@ -74,10 +75,42 @@ func GetProduct(ctx *gin.Context) {
 		return
 	}
 
+	if redisClient != nil {
+		cached, err := redisClient.Get(c, cacheKey).Result()
+		if err == nil {
+			if json.Unmarshal([]byte(cached), &product) == nil {
+				log.Printf("Cache hit for product id: %v", product.ID)
+				ctx.JSON(http.StatusOK, product)
+				return
+			}
+			log.Printf("Failed to unmarshal cached product id: %v, %v", product.ID, err)
+		} else if err != redis.Nil {
+			log.Printf("Redis error for product id: %v, %v", product.ID, err)
+		}
+	} else {
+		log.Printf("Redis client is nil, skipping cache for product id: %v", product.ID)
+	}
+
 	if res := database.DB.First(&product, id); res == nil {
 		log.Printf("Failed to find product:%v", err)
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 		return
+	}
+
+	productJSON, err := json.Marshal(product)
+	if err != nil {
+		log.Printf("Failed to serialize product: %v", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize product"})
+		return
+	}
+
+	if redisClient != nil {
+		err = redisClient.Set(ctx, cacheKey, productJSON, 5*time.Minute).Err()
+		if err != nil {
+			log.Printf("Failed to cache product: %v", err)
+		}
+	} else {
+		log.Printf("Redis client is nil, skipping cache for product")
 	}
 
 	ctx.JSON(http.StatusOK, &product)
@@ -85,6 +118,8 @@ func GetProduct(ctx *gin.Context) {
 
 func AddProduct(ctx *gin.Context) {
 	var req models.Assortment
+	c := context.Background()
+	redisClient := middleware.GetRedisClient()
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		log.Printf("Error to bind JSON:%v", err)
@@ -107,12 +142,26 @@ func AddProduct(ctx *gin.Context) {
 		return
 	}
 
+	if redisClient != nil {
+		err := redisClient.Del(c, "/assortment").Err()
+		if err != nil {
+			log.Printf("Failed to invalidate cache for /assortment, %v", err)
+		} else {
+			log.Printf("Created product ID %d, invalidated cache for /assortment", product.ID)
+		}
+	} else {
+		log.Printf("Redis client is nil, skipping cache invalidation for /assortment")
+	}
+
 	ctx.JSON(http.StatusCreated, product)
 }
 
 func UpdateProduct(ctx *gin.Context) {
 	var product models.Assortment
 	var updatedProduct models.Assortment
+	redisClient := middleware.GetRedisClient()
+	cacheKey := ctx.Request.URL.String()
+	c := context.Background()
 
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
@@ -131,7 +180,10 @@ func UpdateProduct(ctx *gin.Context) {
 
 	res := database.DB.First(&product, id)
 	if res == nil {
-		database.DB.Create(&updatedProduct)
+		err := database.DB.Create(&updatedProduct).Error
+		if err != nil {
+			log.Printf("Failed to create product")
+		}
 		ctx.JSON(http.StatusCreated, updatedProduct)
 		return
 	}
@@ -148,11 +200,31 @@ func UpdateProduct(ctx *gin.Context) {
 		})
 	}
 
+	if redisClient != nil {
+		err := redisClient.Del(c, cacheKey).Err()
+		if err != nil {
+			log.Printf("Failed to invalidate cache for: %v, %v", cacheKey, err)
+		} else {
+			log.Printf("Updated product ID %d, invalidated cache for: %v", product.ID, cacheKey)
+		}
+		err = redisClient.Del(c, "/assortment").Err()
+		if err != nil {
+			log.Printf("Failed to invalidate cache for /assortmenr, %v", err)
+		} else {
+			log.Printf("Updated product ID %d, invalidated cache for %s and /assortment", id, cacheKey)
+		}
+	} else {
+		log.Printf("Redis client is nil, skipping cache invalidation for: %s and /assortment", cacheKey)
+	}
+
 	ctx.JSON(http.StatusOK, product)
 }
 
 func DeleteProduct(ctx *gin.Context) {
 	var product models.Assortment
+	redisClient := middleware.GetRedisClient()
+	cacheKey := ctx.Request.URL.String()
+	c := context.Background()
 
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
@@ -167,6 +239,23 @@ func DeleteProduct(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"Failed to delete id": err,
 		})
+	}
+
+	if redisClient != nil {
+		err := redisClient.Del(c, cacheKey).Err()
+		if err != nil {
+			log.Printf("Failed invalidate cache for: %s", cacheKey)
+		} else {
+			log.Printf("Product %d deleted, invalidate cache for %s", id, cacheKey)
+		}
+		err = redisClient.Del(ctx, "/assortment").Err()
+		if err != nil {
+			log.Printf("Failed to invalidate cache for /assortment: %v", err)
+		} else {
+			log.Printf("Deleted product ID %d, invalidated cache for %s and /assortment", id, cacheKey)
+		}
+	} else {
+		log.Printf("Redis client is nil, skipping cache invalidation for product ID %d", id)
 	}
 
 	ctx.Status(http.StatusNoContent)

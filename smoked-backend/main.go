@@ -33,8 +33,6 @@ func main() {
 		MaxAge:           12 * 60 * 60,
 	}))
 
-	router.Use(middleware.CacheMiddleware)
-
 	router.POST("/register", handlers.Register)
 	router.POST("/login", handlers.Login)
 

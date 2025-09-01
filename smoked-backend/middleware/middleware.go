@@ -2,12 +2,10 @@ package middleware
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"smoked-meat/models"
 	"strconv"
 	"strings"
 
@@ -17,6 +15,7 @@ import (
 )
 
 var JwtKey = []byte(os.Getenv("JWT_SECRET"))
+var redisClient *redis.Client
 
 func NewRedisClient() *redis.Client {
 	addr := os.Getenv("REDIS_ADDR")
@@ -33,18 +32,22 @@ func NewRedisClient() *redis.Client {
 		}
 	}
 
-	client := redis.NewClient(&redis.Options{
+	redisClient = redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: password,
 		DB:       db,
 	})
 
-	_, err := client.Ping(context.Background()).Result()
+	_, err := redisClient.Ping(context.Background()).Result()
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 
-	return client
+	return redisClient
+}
+
+func GetRedisClient() *redis.Client {
+	return redisClient
 }
 
 func AuthMiddleware() gin.HandlerFunc {
@@ -72,63 +75,4 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		c.Next()
 	}
-}
-
-func CacheMiddleware(c *gin.Context) {
-
-	redisHost := os.Getenv("REDIS_HOST")
-	redisPort := os.Getenv("REDIS_PORT")
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
-	})
-
-	if c.Request.Method != http.MethodGet {
-		c.Next()
-		return
-	}
-
-	cacheKey := c.Request.URL.String()
-	ctx := context.Background()
-
-	// Проверяем, инициализирован ли redisClient
-	if redisClient == nil {
-		log.Printf("Redis client is nil, skipping cache for key: %s", cacheKey)
-		c.Next()
-		return
-	}
-
-	// Проверяем кеш в Redis
-	cached, err := redisClient.Get(ctx, cacheKey).Result()
-	if err == redis.Nil {
-		log.Printf("Cache miss for key: %s", cacheKey)
-		c.Next()
-		return
-	}
-	if err != nil {
-		log.Printf("Redis error for key %s: %v", cacheKey, err)
-		c.Next()
-		return
-	}
-
-	// Десериализация в зависимости от маршрута
-	if cacheKey == "/api/assortment" {
-		var assortment []models.Assortment
-		if err := json.Unmarshal([]byte(cached), &assortment); err != nil {
-			log.Printf("Failed to unmarshal cached assortment list for key %s: %v", cacheKey, err)
-			c.Next()
-			return
-		}
-		log.Printf("Cache hit for assortment list")
-		c.JSON(http.StatusOK, assortment)
-	} else {
-		var product models.Assortment
-		if err := json.Unmarshal([]byte(cached), &product); err != nil {
-			log.Printf("Failed to unmarshal cached product for key %s: %v", cacheKey, err)
-			c.Next()
-			return
-		}
-		log.Printf("Cache hit for key: %s", cacheKey)
-		c.JSON(http.StatusOK, product)
-	}
-	c.Abort()
 }
