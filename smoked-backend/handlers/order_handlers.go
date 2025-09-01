@@ -64,11 +64,12 @@ func CreateOrder(db *gorm.DB, redisClient *redis.Client) gin.HandlerFunc {
 		for _, item := range req.Items {
 			totalQuantity += item.Quantity
 		}
-		if totalQuantity > 9 {
-			totalPrice *= 0.92
-		}
 		if totalQuantity > 19 {
 			totalPrice *= 0.88
+		}
+
+		if totalQuantity > 9 && totalQuantity < 20 {
+			totalPrice *= 0.92
 		}
 
 		// Создаем заказ
