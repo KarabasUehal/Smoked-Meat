@@ -3,6 +3,8 @@ import api from '../utils/api';
 import { Link } from 'react-router-dom';
 import './AssortmentList.css';
 import { CartContext } from '../context/CartContext';
+import { AuthContext } from '../context/AuthContext';
+import ReactPaginate from 'react-paginate'; 
 
 const AssortmentList = ({ isAuthenticated }) => {
     const [products, setProducts] = useState([]);
@@ -10,14 +12,23 @@ const AssortmentList = ({ isAuthenticated }) => {
     const [quantities, setQuantities] = useState({});
     const [selectedSpices, setSelectedSpices] = useState({});
     const { addToCart } = useContext(CartContext);
+    const { role } = useContext(AuthContext);
+    const [page, setPage] = useState(1); 
+    const [size] = useState(10); 
+    const [totalPages, setTotalPages] = useState(1); 
+    const [totalCount, setTotalCount] = useState(0); 
 
     useEffect(() => {
-        fetchProducts();
-    }, []);
+        fetchProducts(page, size);
+      }, [page, size]);
 
-    const fetchProducts = async () => {
+    const fetchProducts = async (page, size) => {
         try {
-            const response = await api.get('assortment');
+            const response = await api.get('assortment', {
+            params: { page, size },
+            });
+            setTotalPages(response.data.total_pages || 1);
+            setTotalCount(response.data.total_count || 0);
             setProducts(response.data);
             setQuantities(
                 response.data.reduce((acc, product) => ({
@@ -40,7 +51,11 @@ const AssortmentList = ({ isAuthenticated }) => {
         if (window.confirm('Удалить продукт?')) {
             try {
                 await api.delete(`/product/${id}`);
-                fetchProducts();
+                if (orders.length === 1 && page > 1) {
+          setPage(page - 1);
+        } else {
+          fetchProducts(page, size);
+        }
             } catch (error) {
                 console.error('Ошибка при удалении:', error);
             }
@@ -75,9 +90,17 @@ const AssortmentList = ({ isAuthenticated }) => {
         return <div>Loading...</div>;
     }
 
+    if (products.length === 0 && !error && totalCount === 0) {
+        return <div>No products found.</div>;
+    }
+
+    const handlePageChange = ({ selected }) => {
+    setPage(selected + 1); // react-paginate использует 0-based индексы
+  };
+
     return (
         <div>
-            {isAuthenticated && (
+            {isAuthenticated && role === 'owner' && (
                 <Link to="/add" className="btn btn-warning mb-3">
                     Add product
                 </Link>
@@ -147,7 +170,7 @@ const AssortmentList = ({ isAuthenticated }) => {
                                 >
                                  Add to cart
                                 </button>
-                                {isAuthenticated && (
+                                {isAuthenticated && role === 'owner' && (
                                     <>
                                         <Link
                                             to={`/edit/${product.id}`}
@@ -167,6 +190,21 @@ const AssortmentList = ({ isAuthenticated }) => {
                     ))}
                 </tbody>
                 </table>
+                <ReactPaginate
+            previousLabel="Previous"
+            nextLabel="Next"
+            pageCount={totalPages}
+            onPageChange={handlePageChange}
+            containerClassName="pagination"
+            pageClassName="page-item"
+            pageLinkClassName="page-link"
+            previousClassName="page-item"
+            nextClassName="page-item"
+            previousLinkClassName="page-link"
+            nextLinkClassName="page-link"
+            activeClassName="active"
+            disabledClassName="disabled"
+          />
         </div>
     );
 };

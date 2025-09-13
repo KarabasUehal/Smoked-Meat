@@ -1,9 +1,19 @@
-import React, { createContext, useState } from 'react';
+import React, { createContext, useState, useEffect } from 'react';
+import { emitter } from './events';
 
 export const CartContext = createContext();
 
 export const CartProvider = ({ children }) => {
-    const [cart, setCart] = useState([]); // [{ id, meat, quantity, price, selectedSpice }, ...]
+    const [cart, setCart] = useState([]); 
+
+    useEffect(() => {
+        const handleAuthChange = () => {
+            setCart([]);
+            console.log('Cart cleared due to authChange event');
+        };
+        emitter.on('authChange', handleAuthChange);
+        return () => emitter.off('authChange', handleAuthChange); // Очищаем подписку
+    }, []);
 
     const addToCart = (product, quantity, selectedSpice) => {
         setCart((prevCart) => {

@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type Assortment struct {
+	gorm.Model
 	ID           int        `json:"id" gorm:"primaryKey;autoIncrement"`
 	Meat         string     `json:"meat" gorm:"type:text;not null"`
 	Availability bool       `json:"avail" gorm:"type:boolean;not null"`
@@ -19,6 +22,7 @@ type Assortment struct {
 }
 
 type Spice struct {
+	gorm.Model
 	Recipe1 string `json:"recipe1" gorm:"type:text;not null"`
 	Recipe2 string `json:"recipe2" gorm:"type:text;not null"`
 }

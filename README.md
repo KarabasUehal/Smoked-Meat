@@ -12,13 +12,13 @@ Open browser and follow next adress:
 
 localhost
 
-Now you can choose product, quantity, spice and make your order from the cart! Before order you need to write your phone number to confirm order through incoming the call.
+To make order you need to register first, it's fast. Look at the buttons above assortment list and click "Register". After registration you can choose product, quantity, spice and make your order from the cart! Your phone number will tight to order automatically. The page with your orders availabale beside cart button.
 
-If you want to add or edit some product, you must autorithed. Click on "Login" and enter with this data:
+If you want to add or edit some product, you must autorithed like "owner", not like "client". Click on "Login" and enter with this data:
 
 Login: Arthur
 Password: tutu22
 
-Now you will be able to add, edit and even delete any product. Also you can register new user. 
+Now you will be able to add, edit and even delete any product. Also you can register new user with "owner" role and see orders of all your clients! 
 
 Thanks for reading!

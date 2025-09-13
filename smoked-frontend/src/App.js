@@ -11,6 +11,9 @@ import { CartProvider } from './context/CartContext';
 import backgroundImage from './assets/background.jpg';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
+import OrdersList from './components/OrdersList';
+import ClientOrders from './components/ClientOrders';
+import AdminRegister from './components/AdminRegister';
 
    function App() {
     return (
@@ -25,7 +28,7 @@ import './App.css';
 }
 
    function AppContent() {
-    const { isAuthenticated, logout } = useContext(AuthContext);
+    const { isAuthenticated, role, logout } = useContext(AuthContext);
     console.log('AppContent: isAuthenticated =', isAuthenticated);
 
        return (
@@ -37,26 +40,37 @@ import './App.css';
                    <nav className="mb-3">
                        <Link to="/" className="btn btn-sm btn-success me-2">Assortment</Link>
                        <Link to="/cart" className="btn btn-sm btn-success me-2">My cart</Link>
-                       {isAuthenticated ? (
+                       {isAuthenticated && role ? (
                            <>
-                               <Link to="/register" className="btn btn-sm btn-warning me-2">Register new user</Link>
-                               <button onClick={logout} className="btn btn-link btn-danger">Logout</button>
+                               {role === 'owner' && (
+                                <>
+                                    <Link to="/orders" className="btn btn-sm btn-success me-2">Orders</Link>
+                                    <Link to="/admin/register" className="btn btn-sm btn-success me-2">Register New User</Link>
+                                </>
+                            )}
+                            {role === 'client' && (
+                                <Link to="/my-orders" className="btn btn-sm btn-success me-2">My Orders</Link>
+                            )}
+                            <button onClick={logout} className="btn btn-link btn-danger">Logout</button>
                            </>
                        ) : (
                            <>
+                               <Link to="/register" className="btn btn-sm btn-warning me-2">Register</Link>
                                <Link to="/login" className="me-2">Login</Link>
-                              {/* SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS */}
                            </>
                        )}
                    </nav>
                    <Routes>
                        <Route path="/" element={<AssortmentList isAuthenticated={isAuthenticated} />} />
-                       <Route path="/add" element={isAuthenticated ? <ProductForm /> : <Navigate to="/login" />} />
-                       <Route path="/edit/:id" element={isAuthenticated ? <ProductForm /> : <Navigate to="/login" />} />
+                       <Route path="/add" element={isAuthenticated && role === 'owner'? <ProductForm /> : <Navigate to="/login" />} />
+                       <Route path="/edit/:id" element={isAuthenticated && role === 'owner'? <ProductForm /> : <Navigate to="/login" />} />
                        <Route path="/calculate" element={<CalculatePrice />} />
                        <Route path="/login" element={<Login />} />
                        <Route path="/register" element={<Register />} />
-                       <Route path="/cart" element={<Cart />} />
+                       <Route path="/admin/register" element={(isAuthenticated && role === 'owner') ? <AdminRegister /> : <Navigate to="/login" />}/>
+                       <Route path="/cart" element={<Cart isAuthenticated={isAuthenticated}/>} />
+                       <Route path="/orders" element={<OrdersList isAuthenticated={isAuthenticated}/>} />
+                       <Route path="/my-orders" element={<ClientOrders isAuthenticated={isAuthenticated}/>} />
                    </Routes>
                </div>
            </div>

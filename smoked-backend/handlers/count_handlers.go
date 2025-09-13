@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"smoked-meat/database"
 	"smoked-meat/models"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -27,7 +27,8 @@ func CalculateBulk(db *gorm.DB, redisClient *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req BulkCalculateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверные входные данные: " + err.Error()})
+			log.Error().Err(err).Msg("Invalid json data")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
 			return
 		}
 
@@ -40,9 +41,13 @@ func CalculateBulk(db *gorm.DB, redisClient *redis.Client) gin.HandlerFunc {
 
 		// Проверяем кэш
 		cached, err := redisClient.Get(context.Background(), cacheKey).Result()
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to cache bulk price request")
+		}
 		if err == nil {
 			var result map[string]interface{}
 			if err := json.Unmarshal([]byte(cached), &result); err == nil {
+				log.Info().Str("cache", cached).Msg("Cache hit for bulk price")
 				c.JSON(http.StatusOK, result)
 				return
 			}
@@ -55,11 +60,13 @@ func CalculateBulk(db *gorm.DB, redisClient *redis.Client) gin.HandlerFunc {
 		for _, item := range req.Items {
 			var product models.Assortment
 			if err := db.First(&product, item.ID).Error; err != nil {
+				log.Error().Err(err).Msg("Failed to find product by ID")
 				if err == gorm.ErrRecordNotFound {
-					c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Товар с ID %d не найден", item.ID)})
+					log.Error().Err(err).Msg("Product not found")
+					c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Product with ID %d not found", item.ID)})
 					return
 				}
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка базы данных: " + err.Error()})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error of database: " + err.Error()})
 				return
 			}
 			itemTotal := product.Price * item.Quantity
@@ -77,6 +84,7 @@ func CalculateBulk(db *gorm.DB, redisClient *redis.Client) gin.HandlerFunc {
 			})
 		}
 
+		// Применяем скидки, если товара берут на 10кг+ или 20кг+
 		if totalQuantity > 19 {
 			totalPrice *= 0.88
 		}
@@ -92,6 +100,9 @@ func CalculateBulk(db *gorm.DB, redisClient *redis.Client) gin.HandlerFunc {
 
 		// Сохраняем в кэш
 		data, err := json.Marshal(result)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to serialized bulk data")
+		}
 		if err == nil {
 			redisClient.Set(context.Background(), cacheKey, data, cacheTTL)
 		}
@@ -106,15 +117,15 @@ func CalculatePrice(db *gorm.DB) gin.HandlerFunc {
 		var product models.Assortment
 
 		if err := ctx.ShouldBindJSON(&req); err != nil {
-			log.Printf("Invalid input request")
+			log.Error().Err(err).Msg("Failed to bind json")
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data: " + err.Error()})
 			return
 		}
 
 		if err := database.DB.First(&product, req.ID).Error; err != nil {
-			log.Printf("Product not found:%v", err)
+			log.Error().Err(err).Msg("Product not found")
 			ctx.JSON(http.StatusBadRequest, gin.H{
-				"Failed to found product": err,
+				"Failed to find product": err,
 			})
 			return
 		}

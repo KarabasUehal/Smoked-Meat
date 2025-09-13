@@ -4,12 +4,11 @@ import { CartContext } from '../context/CartContext';
 import './AssortmentList.css';  
 import { useNavigate } from 'react-router-dom';
 
-    const Cart = () => {
+    const Cart = ({ isAuthenticated }) => {
     const { cart, removeFromCart, updateQuantity, updateSpice, clearCart, getTotalPrice } = useContext(CartContext);
     const [totalPrice, setTotalPrice] = useState(0);
     const [showModal, setShowModal] = useState(false);
     const [orderDetails, setOrderDetails] = useState(null);
-    const [phoneNumber, setPhoneNumber] = useState('');
     const navigate = useNavigate();
     const [error, setError] = useState(null);
 
@@ -24,7 +23,7 @@ import { useNavigate } from 'react-router-dom';
                 const response = await api.post('/calculate-bulk', { items });
                 setTotalPrice(response.data.total_price);
             } catch (error) {
-                console.error('Ошибка при расчете общей цены:', error);
+                console.error('Error to calculate total price:', error);
                 setTotalPrice(getTotalPrice());
             }
         };
@@ -44,7 +43,7 @@ import { useNavigate } from 'react-router-dom';
     };
 
     const handleSpiceChange = (item, value) => {
-        if (value) { // Убеждаемся, что значение не пустое
+        if (value) { 
       updateSpice(item.itemKey, value);
     };
     };
@@ -59,11 +58,6 @@ import { useNavigate } from 'react-router-dom';
             return;
         }
 
-    if (!phoneNumber || phoneNumber.length !== 12) { // Проверка номера
-      alert('Пожалуйста, введите корректный номер телефона в формате +79991234567.');
-      return;
-    }
-
         try {
       const items = cart.map((item) => ({
         id: item.id,
@@ -71,31 +65,27 @@ import { useNavigate } from 'react-router-dom';
         selected_spice: item.selectedSpice,
         meat: item.meat,
       }));
-      console.log('Отправляемые данные заказа:', JSON.stringify({ items, phone_number: phoneNumber }, null, 2));
-      const response = await api.post('/order', { items, phone_number: phoneNumber });
-      console.log('Ответ от сервера:', response.data);
+      console.log('Sending order data:', JSON.stringify({ items }, null, 2));
+      const response = await api.post('/order', { items });
+      console.log('Server response:', response.data);
       const newOrderDetails = {
         order_id: response.data.order_id,
         created_at: new Date(response.data.created_at).toLocaleString(),
         items: Array.isArray(response.data.items) ? response.data.items : [],
         total_price: response.data.total_price || 0,
-        phone_number: response.data.phone_number,
       };
       setOrderDetails(newOrderDetails);
-      console.log('orderDetails установлен:', newOrderDetails);
       setShowModal(true);
-      console.log('showModal установлен:', true);
       clearCart();
     } catch (error) {
-      console.error('Ошибка при создании заказа:', error.response?.data || error.message);
-      setError('Ошибка при создании заказа: ' + (error.response?.data?.error || error.message));
+      console.error('Error to create order:', error.response?.data || error.message);
+      setError('Failed to create order: ' + (error.response?.data?.error || error.message));
     }
   };
 
   const closeModal = () => {
     setShowModal(false);
     setOrderDetails(null);
-    setPhoneNumber('');
     navigate('/');
   };
 
@@ -175,42 +165,27 @@ import { useNavigate } from 'react-router-dom';
                         </tbody>
                     </table>
                     <div className="mt-3">
-                        <h4 style={{ color: '#FFFF00', textShadow: '1px 1px 2px rgba(0, 0, 0, 0.8)' }}>
+                        <h4>
                             Price for all products: {totalPrice.toFixed(2)} rub.
                         </h4>
                         <h5 style={{ color: '#fc0808ff', textShadow: '1px 1px 2px rgba(0, 0, 0, 0.8)' }}>
                             Get 8% discount when you buy 10kg+! Or get 12% off when buying 20kg+!
                         </h5>
-                        <div className="mb-3">
-              <label htmlFor="phoneNumber" style={{ color: '#FFFF00', textShadow: '1px 1px 2px rgba(0, 0, 0, 0.8)' }}>
-                Phone number (format: +79991234567):
-              </label>
-              <input
-                type="text"
-                id="phoneNumber"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className="form-control"
-                style={{
-                  width: '200px',
-                  backgroundColor: 'transparent',
-                  color: '#FFFF00',
-                  textShadow: '1px 1px 2px rgba(0, 0, 0, 0.8)',
-                  marginTop: '5px',
-                }}
-                placeholder="+79991234567"
-              />
-            </div>
                         <button onClick={Back} className="btn btn-primary">
                             Back
                         </button>
                         <button onClick={clearCart} className="btn btn-danger">
                             Clear the cart
                         </button>
-                        <button onClick={handleOrder} className="btn btn-primary"
-                        disabled={!phoneNumber || phoneNumber.length !== 12}>
+                        {isAuthenticated ? (
+                        <button onClick={handleOrder} className="btn btn-primary">
                             Order
                         </button>
+                        ) : (
+                          <h3>
+                            You need to register before make order, it's fast. Try it!
+                          </h3>
+                        )}
                     </div>
                 </>
             )}
@@ -223,7 +198,6 @@ import { useNavigate } from 'react-router-dom';
               <>
                 <p><strong>Order number:</strong> {orderDetails.order_id}</p>
                 <p><strong>Date:</strong> {orderDetails.created_at}</p>
-                <p><strong>Phone number:</strong> {orderDetails.phone_number}</p>
                 <h4 className="modal-content-h4">Products:</h4>
                 <ul>
                   {orderDetails.items && orderDetails.items.length > 0 ? (
@@ -236,7 +210,7 @@ import { useNavigate } from 'react-router-dom';
                     <li>No products</li>
                   )}
                 </ul>
-                <p><strong>Total price:</strong> {orderDetails.total_price.toFixed(2)} руб.</p>
+                <p><strong>Total price:</strong> {orderDetails.total_price.toFixed(2)} rub.</p>
               </>
             ) : (
               <p>Loading of order data...</p>
