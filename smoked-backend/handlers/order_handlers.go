@@ -120,7 +120,7 @@ func CreateClientOrder(c *gin.Context) {
 	tx.Commit()
 
 	// Очищаем кэш
-	pattern := []string{"/orders*", "/client/orders*" + phoneNumber, "assortment*"}
+	pattern := []string{"/orders*", "/client/orders*" + phoneNumber}
 	for _, pattern := range pattern {
 		cursor := uint64(0)
 		for {
@@ -367,6 +367,8 @@ func GetOrderByID(ctx *gin.Context) {
 
 func DeleteOrderByID(ctx *gin.Context) {
 	var order models.Order
+	redisClient := middleware.GetRedisClient()
+	c := context.Background()
 
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
@@ -391,6 +393,29 @@ func DeleteOrderByID(ctx *gin.Context) {
 		return
 	}
 	tx.Commit()
+
+	pattern := []string{"/orders*", "/client/orders*" + order.PhoneNumber, "assortment*"}
+	for _, pattern := range pattern {
+		cursor := uint64(0)
+		for {
+			keys, nextCursor, err := redisClient.Scan(c, cursor, pattern, 100).Result()
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to scan orders cache keys")
+				break
+			}
+			if len(keys) > 0 {
+				if err := redisClient.Del(ctx, keys...).Err(); err != nil {
+					log.Error().Err(err).Msg("Failed to delete orders cache keys")
+				} else {
+					log.Info().Str("pattern", pattern).Int("keys_deleted", len(keys)).Msg("Cache keys deleted")
+				}
+			}
+			cursor = nextCursor
+			if cursor == 0 {
+				break
+			}
+		}
+	}
 
 	ctx.Status(http.StatusNoContent)
 }
