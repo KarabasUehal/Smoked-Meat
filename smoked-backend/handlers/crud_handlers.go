@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"smoked-meat/database"
 	"smoked-meat/middleware"
@@ -66,7 +67,17 @@ func GetAssortment(ctx *gin.Context) {
 		return
 	}
 
-	assortmentJSON, err := json.Marshal(ass)
+	totalPages := (int(totalCount) + size - 1) / size
+
+	resp := gin.H{
+		"assortment":   ass,
+		"total_count":  totalCount,
+		"total_pages":  totalPages,
+		"current_page": page,
+		"page_size":    size,
+	}
+
+	assortmentJSON, err := json.Marshal(resp)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to serialize assortment")
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize assortment"})
@@ -82,7 +93,7 @@ func GetAssortment(ctx *gin.Context) {
 		log.Info().Str("cacheKey", cacheKey).Msg("Redis client is nil, skipping cache for assortment list")
 	}
 
-	ctx.JSON(http.StatusOK, ass)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 func GetProduct(ctx *gin.Context) {
@@ -169,14 +180,28 @@ func AddProduct(ctx *gin.Context) {
 	tx.Commit()
 
 	if redisClient != nil {
-		err := redisClient.Del(c, "/assortment").Err()
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to invalidate cache for /assortment")
-		} else {
-			log.Info().Any("product_id", product.ID).Msg("Created product , invalidated cache for /assortment")
+		pattern := []string{"/assortment*"}
+		for _, pattern := range pattern {
+			cursor := uint64(0)
+			for {
+				keys, nextCursor, err := redisClient.Scan(c, cursor, pattern, 100).Result()
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to scan assortment cache keys")
+					break
+				}
+				if len(keys) > 0 {
+					if err := redisClient.Del(ctx, keys...).Err(); err != nil {
+						log.Error().Err(err).Msg("Failed to delete assortment cache keys")
+					} else {
+						log.Info().Str("pattern", pattern).Int("keys_deleted", len(keys)).Msg("Cache keys deleted")
+					}
+				}
+				cursor = nextCursor
+				if cursor == 0 {
+					break
+				}
+			}
 		}
-	} else {
-		log.Info().Msg("Redis client is nil, skipping cache invalidation for /assortment")
 	}
 
 	ctx.JSON(http.StatusCreated, product)
@@ -186,7 +211,6 @@ func UpdateProduct(ctx *gin.Context) {
 	var product models.Assortment
 	var updatedProduct models.Assortment
 	redisClient := middleware.GetRedisClient()
-	cacheKey := ctx.Request.URL.String()
 	c := context.Background()
 
 	id, err := strconv.Atoi(ctx.Param("id"))
@@ -237,20 +261,28 @@ func UpdateProduct(ctx *gin.Context) {
 	tx.Commit()
 
 	if redisClient != nil {
-		err := redisClient.Del(c, cacheKey).Err()
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to invalidate cache")
-		} else {
-			log.Info().Msg("Updated product, invalidated cache for product")
+		pattern := []string{"/assortment*", fmt.Sprintf("/product/%v", id)}
+		for _, pattern := range pattern {
+			cursor := uint64(0)
+			for {
+				keys, nextCursor, err := redisClient.Scan(c, cursor, pattern, 100).Result()
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to scan assortment cache keys")
+					break
+				}
+				if len(keys) > 0 {
+					if err := redisClient.Del(ctx, keys...).Err(); err != nil {
+						log.Error().Err(err).Msg("Failed to delete assortment cache keys")
+					} else {
+						log.Info().Str("pattern", pattern).Int("keys_deleted", len(keys)).Msg("Cache keys deleted")
+					}
+				}
+				cursor = nextCursor
+				if cursor == 0 {
+					break
+				}
+			}
 		}
-		err = redisClient.Del(c, "/assortment").Err()
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to invalidate cache for /assortment")
-		} else {
-			log.Info().Msg("Updated product, invalidated cache for product and /assortment")
-		}
-	} else {
-		log.Info().Msg("Redis client is nil, skipping cache invalidation for product and /assortment")
 	}
 
 	ctx.JSON(http.StatusOK, product)
@@ -259,7 +291,6 @@ func UpdateProduct(ctx *gin.Context) {
 func DeleteProduct(ctx *gin.Context) {
 	var product models.Assortment
 	redisClient := middleware.GetRedisClient()
-	cacheKey := ctx.Request.URL.String()
 	c := context.Background()
 
 	id, err := strconv.Atoi(ctx.Param("id"))
@@ -289,20 +320,28 @@ func DeleteProduct(ctx *gin.Context) {
 	tx.Commit()
 
 	if redisClient != nil {
-		err := redisClient.Del(c, cacheKey).Err()
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to invalidate cache for deleted product")
-		} else {
-			log.Info().Msg("Product deleted, invalidate cache for product ID")
+		pattern := []string{"/assortment*", fmt.Sprintf("/product/%v", id)}
+		for _, pattern := range pattern {
+			cursor := uint64(0)
+			for {
+				keys, nextCursor, err := redisClient.Scan(c, cursor, pattern, 100).Result()
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to scan assortment cache keys")
+					break
+				}
+				if len(keys) > 0 {
+					if err := redisClient.Del(ctx, keys...).Err(); err != nil {
+						log.Error().Err(err).Msg("Failed to delete assortment cache keys")
+					} else {
+						log.Info().Str("pattern", pattern).Int("keys_deleted", len(keys)).Msg("Cache keys deleted")
+					}
+				}
+				cursor = nextCursor
+				if cursor == 0 {
+					break
+				}
+			}
 		}
-		err = redisClient.Del(ctx, "/assortment").Err()
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to invalidate cache for /assortment")
-		} else {
-			log.Info().Msg("Deleted product ID, invalidated cache for product and /assortment")
-		}
-	} else {
-		log.Info().Msg("Redis client is nil, skipping cache invalidation for product ID and /assortment")
 	}
 
 	ctx.Status(http.StatusNoContent)

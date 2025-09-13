@@ -29,15 +29,15 @@ const AssortmentList = ({ isAuthenticated }) => {
             });
             setTotalPages(response.data.total_pages || 1);
             setTotalCount(response.data.total_count || 0);
-            setProducts(response.data);
+            setProducts(response.data.assortment);
             setQuantities(
-                response.data.reduce((acc, product) => ({
+                response.data.assortment.reduce((acc, product) => ({
                     ...acc,
                     [product.id]: 1,
                 }), {})
             );
             setSelectedSpices(
-                response.data.reduce((acc, product) => ({
+                response.data.assortment.reduce((acc, product) => ({
                     ...acc,
                     [product.id]: product.spice.recipe1 || product.spice.recipe2 || '',
                 }), {})
@@ -51,7 +51,7 @@ const AssortmentList = ({ isAuthenticated }) => {
         if (window.confirm('Удалить продукт?')) {
             try {
                 await api.delete(`/product/${id}`);
-                if (orders.length === 1 && page > 1) {
+                if (products.length === 1 && page > 1) {
           setPage(page - 1);
         } else {
           fetchProducts(page, size);
